@@ -3,7 +3,6 @@ import os
 import tempfile
 from utils.pdf_parser import PDFParser
 import pandas as pd
-import glob
 import shutil
 from pathlib import Path
 
@@ -24,7 +23,7 @@ parser = get_parser()
 st.title("📄 PDF Parser")
 st.write("Upload PDF documents to extract text, tables, and images.")
 
-# Check for common dependencies
+# Check for optional dependencies
 try:
     from pdf2image import convert_from_path
     has_pdf2image = True
@@ -37,34 +36,40 @@ try:
 except (ImportError, ModuleNotFoundError):
     has_pytesseract = False
 
-# Display installation instructions if dependencies are missing
+try:
+    import pymupdf4llm
+    has_pymupdf4llm = True
+except (ImportError, ModuleNotFoundError):
+    has_pymupdf4llm = False
+
+# Simple notification about missing dependencies
 if not has_pdf2image:
-    st.warning("""
-    ⚠️ pdf2image is not installed or Poppler is missing. 
-    The app will fallback to PyMuPDF for image extraction, but quality may be reduced.
-    
-    To install pdf2image: `pip install pdf2image`
-    
-    For Poppler:
-    - Windows: Download from [here](https://github.com/oschwartz10612/poppler-windows/releases/)
-      and add the bin folder to your PATH.
-    - MacOS: `brew install poppler`
-    - Linux: `apt-get install poppler-utils`
-    """)
+    st.info("Note: Using fallback image extraction method. For better quality, install pdf2image and Poppler.")
 
 if not has_pytesseract:
-    st.warning("""
-    ⚠️ pytesseract is not installed or Tesseract OCR is missing.
-    OCR functionality will be disabled.
-    
-    To install pytesseract: `pip install pytesseract`
-    
-    For Tesseract OCR:
-    - Windows: Download from [here](https://github.com/UB-Mannheim/tesseract/wiki)
-      and add it to your PATH.
-    - MacOS: `brew install tesseract`
-    - Linux: `apt-get install tesseract-ocr`
-    """)
+    st.info("Note: Using PyMuPDF's built-in OCR instead of pytesseract. This requires the TESSDATA_PREFIX environment variable to be set.")
+    # Add a configuration section for OCR if needed
+    with st.expander("OCR Configuration"):
+        st.markdown("""
+        ### Setting up PyMuPDF OCR
+        
+        For OCR to work with PyMuPDF, set the `TESSDATA_PREFIX` environment variable to the path where Tesseract language data is located.
+        
+        **Example on Windows:**
+        ```
+        set TESSDATA_PREFIX=C:\Program Files\Tesseract-OCR\tessdata
+        ```
+        
+        **Example on Linux/macOS:**
+        ```
+        export TESSDATA_PREFIX=/usr/share/tesseract-ocr/4.00/tessdata
+        ```
+        
+        Restart the application after setting the environment variable.
+        """)
+
+if has_pymupdf4llm:
+    st.success("Enhanced text extraction with PyMuPDF4LLM is enabled. This provides better formatted text extraction, especially for complex PDF layouts.")
 
 # File uploader
 uploaded_file = st.file_uploader("Upload a PDF file", type=['pdf'])
@@ -98,55 +103,127 @@ if uploaded_file is not None:
                 with tab2:
                     st.header("Extracted Text")
                     if results['text']:
-                        for text_item in results['text']:
-                            with st.expander(f"Page {text_item['page']}"):
-                                st.text(text_item['content'])
+                        if has_pymupdf4llm:
+                            st.success("Text extracted using enhanced PyMuPDF4LLM for better formatting and layout preservation.")
+                        
+                        st.info(f"Showing all extracted text from {len(results['text'])} pages")
+                        
+                        # Display all pages in a single scrollable container with page separators
+                        all_text = ""
+                        for i, text_item in enumerate(results['text']):
+                            all_text += f"--- PAGE {text_item['page']} ---\n\n"
+                            all_text += text_item['content']
+                            all_text += "\n\n"
+                        
+                        st.text_area(
+                            label="All Text Content",
+                            value=all_text,
+                            height=600,
+                            key="all_text_content"
+                        )
+                        
+                        # Add a download button for all text
+                        st.download_button(
+                            label="Download All Text",
+                            data=all_text,
+                            file_name="all_text.txt",
+                            mime="text/plain"
+                        )
                     else:
                         st.info("No text was extracted from the document.")
                 
                 with tab3:
                     st.header("Extracted Tables")
                     if results['tables']:
-                        for table in results['tables']:
-                            with st.expander(f"Page {table['page']} - Table {table['table_num']}"):
-                                st.dataframe(table['dataframe'], use_container_width=True)
-                                
-                                # Download button for CSV
-                                csv_path = os.path.join(output_dir, 'tables', f"page_{table['page']}_table_{table['table_num']}.csv")
-                                if os.path.exists(csv_path):
-                                    with open(csv_path, 'rb') as f:
-                                        st.download_button(
-                                            label="Download CSV",
-                                            data=f,
-                                            file_name=f"table_page{table['page']}_table{table['table_num']}.csv",
-                                            mime="text/csv"
-                                        )
+                        st.info(f"Showing all extracted tables ({len(results['tables'])} tables found)")
+                        
+                        # Display all tables with separators
+                        for i, table in enumerate(results['tables']):
+                            st.markdown(f"### Page {table['page']} - Table {table['table_num']}")
+                            st.dataframe(table['dataframe'], use_container_width=True)
+                            
+                            # Download button for each table's CSV
+                            csv_path = os.path.join(output_dir, 'tables', f"page_{table['page']}_table_{table['table_num']}.csv")
+                            if os.path.exists(csv_path):
+                                with open(csv_path, 'rb') as f:
+                                    st.download_button(
+                                        label=f"Download Table {i+1} as CSV",
+                                        data=f,
+                                        file_name=f"page{table['page']}_table{table['table_num']}.csv",
+                                        mime="text/csv",
+                                        key=f"download_table_{i}"
+                                    )
+                            st.markdown("---")
                     else:
                         st.info("No tables found in the document.")
                 
                 with tab4:
-                    col1, col2 = st.columns(2)
+                    st.header("Images & OCR Text")
                     
-                    with col1:
-                        st.header("Images")
-                        if results['images']:
-                            for img_item in results['images']:
-                                with st.expander(f"Page {img_item['page']}"):
-                                    st.image(img_item['image'], use_column_width=True)
-                        else:
-                            st.info("No images were extracted from the document.")
-                    
-                    with col2:
-                        st.header("OCR Text")
-                        if results['ocr_text']:
-                            for ocr_item in results['ocr_text']:
-                                with st.expander(f"Page {ocr_item['page']}"):
-                                    st.text(ocr_item['content'])
-                        else:
-                            if not has_pytesseract:
-                                st.info("OCR is disabled because pytesseract is not installed.")
+                    if results['images'] or results['ocr_text']:
+                        # Create columns for images and OCR text
+                        col1, col2 = st.columns(2)
+                        
+                        # Handle images
+                        with col1:
+                            st.subheader("Images")
+                            if results['images']:
+                                st.info(f"Showing all extracted images ({len(results['images'])} images found)")
+                                
+                                # Display all images with captions
+                                for i, img_item in enumerate(results['images']):
+                                    st.image(img_item['image'], use_column_width=True, 
+                                             caption=f"Page {img_item['page']} - Image {i+1}")
+                                    st.markdown("---")
                             else:
-                                st.info("No OCR text was extracted.")
+                                st.info("No images were extracted from the document.")
+                        
+                        # Handle OCR text
+                        with col2:
+                            st.subheader("OCR Text")
+                            if results['ocr_text']:
+                                if parser.has_pymupdf_ocr:
+                                    st.success("OCR performed using PyMuPDF's built-in OCR engine.")
+                                else:
+                                    st.info("OCR performed using pytesseract.")
+                                
+                                st.info(f"Showing all OCR text ({len(results['ocr_text'])} pages)")
+                                
+                                # Combine all OCR text with page separators
+                                all_ocr = ""
+                                for i, ocr_item in enumerate(results['ocr_text']):
+                                    all_ocr += f"--- PAGE {ocr_item['page']} OCR TEXT ---\n\n"
+                                    all_ocr += ocr_item['content']
+                                    all_ocr += "\n\n"
+                                
+                                st.text_area(
+                                    label="All OCR Content",
+                                    value=all_ocr,
+                                    height=600,
+                                    key="all_ocr_content"
+                                )
+                                
+                                # Add a download button for all OCR text
+                                st.download_button(
+                                    label="Download All OCR Text",
+                                    data=all_ocr,
+                                    file_name="all_ocr_text.txt",
+                                    mime="text/plain"
+                                )
+                            else:
+                                if not has_pytesseract and not parser.has_pymupdf_ocr:
+                                    st.warning("""
+                                    OCR is disabled because neither pytesseract nor PyMuPDF OCR is properly configured.
+                                    
+                                    To enable OCR:
+                                    1. Install pytesseract: `pip install pytesseract` and install Tesseract OCR
+                                    OR
+                                    2. Set the TESSDATA_PREFIX environment variable for PyMuPDF OCR
+                                    """)
+                                else:
+                                    st.info("No OCR text was extracted from this document.")
+                    else:
+                        st.info("No images or OCR text were extracted from the document.")
                 
                 # Add download buttons for all extracted content
                 if any([results['text'], results['tables'], results['images'], results['ocr_text']]):
@@ -179,12 +256,9 @@ st.markdown("""
 ### How to use this app:
 1. Upload a PDF file using the file uploader
 2. Wait for the processing to complete
-3. Explore the extracted content in the tabs
-4. Download individual tables or all results as a ZIP file
-
-### Dependencies:
-- For image extraction: pdf2image and Poppler
-- For OCR: pytesseract and Tesseract OCR
+3. Navigate through the content using the tabs
+4. Scroll through all extracted content
+5. Download individual items or all results as a ZIP file
 """)
 
 # Display app information
@@ -201,40 +275,34 @@ with st.sidebar:
     
     No data is stored on servers; all processing happens in your browser.
     """)
+
+    # Add OCR information section
+    st.header("OCR Information")
+    st.info("""
+    This app supports two OCR methods:
     
-    st.header("Troubleshooting")
-    with st.expander("Missing Dependencies"):
-        st.markdown("""
-        ### Installing Poppler:
-        
-        **Windows:**
-        1. Download from [GitHub](https://github.com/oschwartz10612/poppler-windows/releases/)
-        2. Extract to a folder (e.g., `C:\\Program Files\\poppler`)
-        3. Add the `bin` folder to your PATH
-        
-        **Mac:**
-        ```
-        brew install poppler
-        ```
-        
-        **Linux:**
-        ```
-        apt-get install poppler-utils
-        ```
-        
-        ### Installing Tesseract:
-        
-        **Windows:**
-        1. Download installer from [UB Mannheim](https://github.com/UB-Mannheim/tesseract/wiki)
-        2. Run installer and add to PATH
-        
-        **Mac:**
-        ```
-        brew install tesseract
-        ```
-        
-        **Linux:**
-        ```
-        apt-get install tesseract-ocr
-        ```
-        """)
+    1. PyMuPDF's built-in OCR (recommended)
+       - Requires TESSDATA_PREFIX environment variable
+       - More efficient and integrated
+    
+    2. Pytesseract (fallback)
+       - Requires pytesseract and Tesseract OCR installed
+       
+    At least one of these methods must be configured for OCR to work.
+    """)
+    
+    # Add text extraction information
+    st.header("Text Extraction")
+    st.info("""
+    This app uses advanced text extraction methods:
+    
+    1. PyMuPDF4LLM (preferred)
+       - Better formatting and layout preservation
+       - Markdown-formatted text for better readability
+       - Improved handling of complex documents
+       
+    2. Standard PyMuPDF (fallback)
+       - Basic text extraction
+       
+    The app automatically uses the best available method.
+    """)
