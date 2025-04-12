@@ -36,12 +36,40 @@ try:
 except (ImportError, ModuleNotFoundError):
     has_pytesseract = False
 
+try:
+    import pymupdf4llm
+    has_pymupdf4llm = True
+except (ImportError, ModuleNotFoundError):
+    has_pymupdf4llm = False
+
 # Simple notification about missing dependencies
 if not has_pdf2image:
     st.info("Note: Using fallback image extraction method. For better quality, install pdf2image and Poppler.")
 
 if not has_pytesseract:
-    st.info("Note: OCR functionality is disabled. Install pytesseract and Tesseract OCR to enable it.")
+    st.info("Note: Using PyMuPDF's built-in OCR instead of pytesseract. This requires the TESSDATA_PREFIX environment variable to be set.")
+    # Add a configuration section for OCR if needed
+    with st.expander("OCR Configuration"):
+        st.markdown("""
+        ### Setting up PyMuPDF OCR
+        
+        For OCR to work with PyMuPDF, set the `TESSDATA_PREFIX` environment variable to the path where Tesseract language data is located.
+        
+        **Example on Windows:**
+        ```
+        set TESSDATA_PREFIX=C:\Program Files\Tesseract-OCR\tessdata
+        ```
+        
+        **Example on Linux/macOS:**
+        ```
+        export TESSDATA_PREFIX=/usr/share/tesseract-ocr/4.00/tessdata
+        ```
+        
+        Restart the application after setting the environment variable.
+        """)
+
+if has_pymupdf4llm:
+    st.success("Enhanced text extraction with PyMuPDF4LLM is enabled. This provides better formatted text extraction, especially for complex PDF layouts.")
 
 # File uploader
 uploaded_file = st.file_uploader("Upload a PDF file", type=['pdf'])
@@ -75,6 +103,9 @@ if uploaded_file is not None:
                 with tab2:
                     st.header("Extracted Text")
                     if results['text']:
+                        if has_pymupdf4llm:
+                            st.success("Text extracted using enhanced PyMuPDF4LLM for better formatting and layout preservation.")
+                        
                         st.info(f"Showing all extracted text from {len(results['text'])} pages")
                         
                         # Display all pages in a single scrollable container with page separators
@@ -151,6 +182,11 @@ if uploaded_file is not None:
                         with col2:
                             st.subheader("OCR Text")
                             if results['ocr_text']:
+                                if parser.has_pymupdf_ocr:
+                                    st.success("OCR performed using PyMuPDF's built-in OCR engine.")
+                                else:
+                                    st.info("OCR performed using pytesseract.")
+                                
                                 st.info(f"Showing all OCR text ({len(results['ocr_text'])} pages)")
                                 
                                 # Combine all OCR text with page separators
@@ -175,10 +211,17 @@ if uploaded_file is not None:
                                     mime="text/plain"
                                 )
                             else:
-                                if not has_pytesseract:
-                                    st.info("OCR is disabled because pytesseract is not installed.")
+                                if not has_pytesseract and not parser.has_pymupdf_ocr:
+                                    st.warning("""
+                                    OCR is disabled because neither pytesseract nor PyMuPDF OCR is properly configured.
+                                    
+                                    To enable OCR:
+                                    1. Install pytesseract: `pip install pytesseract` and install Tesseract OCR
+                                    OR
+                                    2. Set the TESSDATA_PREFIX environment variable for PyMuPDF OCR
+                                    """)
                                 else:
-                                    st.info("No OCR text was extracted.")
+                                    st.info("No OCR text was extracted from this document.")
                     else:
                         st.info("No images or OCR text were extracted from the document.")
                 
@@ -231,4 +274,35 @@ with st.sidebar:
     - OCR text from images
     
     No data is stored on servers; all processing happens in your browser.
+    """)
+
+    # Add OCR information section
+    st.header("OCR Information")
+    st.info("""
+    This app supports two OCR methods:
+    
+    1. PyMuPDF's built-in OCR (recommended)
+       - Requires TESSDATA_PREFIX environment variable
+       - More efficient and integrated
+    
+    2. Pytesseract (fallback)
+       - Requires pytesseract and Tesseract OCR installed
+       
+    At least one of these methods must be configured for OCR to work.
+    """)
+    
+    # Add text extraction information
+    st.header("Text Extraction")
+    st.info("""
+    This app uses advanced text extraction methods:
+    
+    1. PyMuPDF4LLM (preferred)
+       - Better formatting and layout preservation
+       - Markdown-formatted text for better readability
+       - Improved handling of complex documents
+       
+    2. Standard PyMuPDF (fallback)
+       - Basic text extraction
+       
+    The app automatically uses the best available method.
     """)

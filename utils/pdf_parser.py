@@ -20,6 +20,13 @@ try:
 except (ImportError, ModuleNotFoundError):
     HAS_PYTESSERACT = False
 
+# Try importing pymupdf4llm for enhanced text extraction
+try:
+    import pymupdf4llm
+    HAS_PYMUPDF4LLM = True
+except (ImportError, ModuleNotFoundError):
+    HAS_PYMUPDF4LLM = False
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -31,7 +38,27 @@ class PDFParser:
         if not HAS_PDF2IMAGE:
             logger.warning("pdf2image not available. Image extraction will use PyMuPDF instead.")
         if not HAS_PYTESSERACT:
-            logger.warning("pytesseract not available. OCR functionality will be disabled.")
+            logger.warning("pytesseract not available. Using PyMuPDF's built-in OCR instead.")
+        if HAS_PYMUPDF4LLM:
+            logger.info("pymupdf4llm is available. Using enhanced text extraction capabilities.")
+        
+        # Check if PyMuPDF OCR is available (TESSDATA_PREFIX environment variable set)
+        self.has_pymupdf_ocr = self._check_pymupdf_ocr()
+    
+    def _check_pymupdf_ocr(self):
+        """Check if PyMuPDF's OCR functionality is available."""
+        try:
+            # Create a small test image
+            pix = fitz.Pixmap(fitz.csRGB, 100, 100)
+            # Try to OCR it - this will raise an exception if OCR is not available
+            pix.pdfocr_tobytes()
+            return True
+        except Exception as e:
+            if "No OCR support: TESSDATA_PREFIX not set" in str(e):
+                logger.warning("PyMuPDF OCR is not available. TESSDATA_PREFIX environment variable is not set.")
+            else:
+                logger.warning(f"PyMuPDF OCR is not available: {str(e)}")
+            return False
     
     def _extract_images_pymupdf(self, pdf_doc):
         """Extract images using PyMuPDF as fallback when pdf2image is not available."""
@@ -52,6 +79,48 @@ class PDFParser:
                 logger.warning(f"Could not extract image from page {page_idx + 1}: {str(e)}")
                 
         return images
+    
+    def _perform_pymupdf_ocr(self, page_pixmap, page_num):
+        """Perform OCR using PyMuPDF's built-in OCR functionality."""
+        try:
+            # Convert the pixmap to a one-page PDF with OCR text embedded
+            pdfdata = page_pixmap.pdfocr_tobytes()
+            
+            # Open the result as a PDF document
+            temp_doc = fitz.open("pdf", pdfdata)
+            
+            # Extract the OCR text from the first (and only) page
+            ocr_text = temp_doc[0].get_text()
+            
+            if ocr_text.strip():
+                return {
+                    'page': page_num,
+                    'content': ocr_text
+                }
+            return None
+        except Exception as e:
+            logger.warning(f"PyMuPDF OCR failed for page {page_num}: {str(e)}")
+            return None
+            
+    def _extract_text_pymupdf4llm(self, pdf_doc):
+        """Extract text using pymupdf4llm for enhanced markdown-formatted text."""
+        text_results = []
+        
+        try:
+            for page_num in range(len(pdf_doc)):
+                # Extract text with pymupdf4llm (returns markdown formatted text)
+                text = pymupdf4llm.get_page_markdown(pdf_doc, page_num)
+                
+                if text.strip():
+                    text_results.append({
+                        'page': page_num + 1,
+                        'content': text
+                    })
+        except Exception as e:
+            logger.warning(f"Error extracting text with pymupdf4llm: {str(e)}")
+            # If pymupdf4llm fails, return empty list to fall back to regular text extraction
+            
+        return text_results
         
     def process_pdf(self, pdf_path):
         """
@@ -89,18 +158,37 @@ class PDFParser:
                     'pages': len(doc)
                 }
                 
-                # Extract text using PyMuPDF
-                for page_num, page in enumerate(doc):
-                    text = page.get_text()
-                    if text.strip():
-                        results['text'].append({
-                            'page': page_num + 1,
-                            'content': text
-                        })
+                # Try enhanced text extraction with pymupdf4llm if available
+                if HAS_PYMUPDF4LLM:
+                    results['text'] = self._extract_text_pymupdf4llm(doc)
+                
+                # Fall back to regular PyMuPDF text extraction if needed
+                if not results['text']:
+                    for page_num, page in enumerate(doc):
+                        text = page.get_text()
+                        if text.strip():
+                            results['text'].append({
+                                'page': page_num + 1,
+                                'content': text
+                            })
                 
                 # Extract images using PyMuPDF if pdf2image is not available
                 if not HAS_PDF2IMAGE:
                     results['images'] = self._extract_images_pymupdf(doc)
+                
+                # Perform OCR using PyMuPDF's built-in OCR if available
+                if self.has_pymupdf_ocr and not HAS_PYTESSERACT:
+                    for page_num, page in enumerate(doc):
+                        try:
+                            # Get the page as a pixmap (image)
+                            pix = page.get_pixmap(dpi=300)
+                            
+                            # Perform OCR on the pixmap
+                            ocr_result = self._perform_pymupdf_ocr(pix, page_num + 1)
+                            if ocr_result:
+                                results['ocr_text'].append(ocr_result)
+                        except Exception as e:
+                            logger.warning(f"Error extracting OCR from page {page_num + 1}: {str(e)}")
             
             # Extract tables using pdfplumber
             try:
