@@ -1,0 +1,12 @@
+streamlit==1.32.0
+PyMuPDF==1.23.8
+pdfplumber==0.10.3
+Pillow==10.2.0
+python-dateutil==2.8.2
+pandas==2.2.1
+python-dotenv==1.0.1
+
+# Optional dependencies - uncomment if needed
+# pdf2image==1.17.0  # Requires Poppler: https://github.com/oschwartz10612/poppler-windows/releases/
+# easyocr==1.7.1  # Alternative OCR library (doesn't require Tesseract)
+# pytesseract==0.3.10  # Requires Tesseract: https://github.com/UB-Mannheim/tesseract/wiki 
