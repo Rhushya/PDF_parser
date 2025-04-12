@@ -1,0 +1,18 @@
+name: pdfparser
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - pip=23.1.2
+  - pip:
+    - streamlit==1.32.0
+    - PyMuPDF==1.23.8
+    - pdfplumber==0.10.3
+    - Pillow==10.2.0
+    - python-dateutil==2.8.2
+    - pandas==2.2.1
+    - python-dotenv==1.0.1
+    # Optional dependencies (uncomment if needed)
+    # - pdf2image==1.17.0
+    # - pytesseract==0.3.10 

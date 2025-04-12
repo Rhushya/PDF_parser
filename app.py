@@ -3,7 +3,6 @@ import os
 import tempfile
 from utils.pdf_parser import PDFParser
 import pandas as pd
-import glob
 import shutil
 from pathlib import Path
 
@@ -24,7 +23,7 @@ parser = get_parser()
 st.title("📄 PDF Parser")
 st.write("Upload PDF documents to extract text, tables, and images.")
 
-# Check for common dependencies
+# Check for optional dependencies
 try:
     from pdf2image import convert_from_path
     has_pdf2image = True
@@ -37,34 +36,12 @@ try:
 except (ImportError, ModuleNotFoundError):
     has_pytesseract = False
 
-# Display installation instructions if dependencies are missing
+# Simple notification about missing dependencies
 if not has_pdf2image:
-    st.warning("""
-    ⚠️ pdf2image is not installed or Poppler is missing. 
-    The app will fallback to PyMuPDF for image extraction, but quality may be reduced.
-    
-    To install pdf2image: `pip install pdf2image`
-    
-    For Poppler:
-    - Windows: Download from [here](https://github.com/oschwartz10612/poppler-windows/releases/)
-      and add the bin folder to your PATH.
-    - MacOS: `brew install poppler`
-    - Linux: `apt-get install poppler-utils`
-    """)
+    st.info("Note: Using fallback image extraction method. For better quality, install pdf2image and Poppler.")
 
 if not has_pytesseract:
-    st.warning("""
-    ⚠️ pytesseract is not installed or Tesseract OCR is missing.
-    OCR functionality will be disabled.
-    
-    To install pytesseract: `pip install pytesseract`
-    
-    For Tesseract OCR:
-    - Windows: Download from [here](https://github.com/UB-Mannheim/tesseract/wiki)
-      and add it to your PATH.
-    - MacOS: `brew install tesseract`
-    - Linux: `apt-get install tesseract-ocr`
-    """)
+    st.info("Note: OCR functionality is disabled. Install pytesseract and Tesseract OCR to enable it.")
 
 # File uploader
 uploaded_file = st.file_uploader("Upload a PDF file", type=['pdf'])
@@ -181,10 +158,6 @@ st.markdown("""
 2. Wait for the processing to complete
 3. Explore the extracted content in the tabs
 4. Download individual tables or all results as a ZIP file
-
-### Dependencies:
-- For image extraction: pdf2image and Poppler
-- For OCR: pytesseract and Tesseract OCR
 """)
 
 # Display app information
@@ -201,40 +174,3 @@ with st.sidebar:
     
     No data is stored on servers; all processing happens in your browser.
     """)
-    
-    st.header("Troubleshooting")
-    with st.expander("Missing Dependencies"):
-        st.markdown("""
-        ### Installing Poppler:
-        
-        **Windows:**
-        1. Download from [GitHub](https://github.com/oschwartz10612/poppler-windows/releases/)
-        2. Extract to a folder (e.g., `C:\\Program Files\\poppler`)
-        3. Add the `bin` folder to your PATH
-        
-        **Mac:**
-        ```
-        brew install poppler
-        ```
-        
-        **Linux:**
-        ```
-        apt-get install poppler-utils
-        ```
-        
-        ### Installing Tesseract:
-        
-        **Windows:**
-        1. Download installer from [UB Mannheim](https://github.com/UB-Mannheim/tesseract/wiki)
-        2. Run installer and add to PATH
-        
-        **Mac:**
-        ```
-        brew install tesseract
-        ```
-        
-        **Linux:**
-        ```
-        apt-get install tesseract-ocr
-        ```
-        """)

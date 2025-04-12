@@ -1,0 +1,74 @@
+{
+  "version": "1",
+  "packages": {
+    "streamlit": {
+      "version": "1.32.0",
+      "dependencies": [
+        "altair",
+        "blinker",
+        "cachetools",
+        "click",
+        "numpy",
+        "packaging",
+        "pandas",
+        "pillow",
+        "protobuf",
+        "pyarrow",
+        "pydeck",
+        "typing-extensions"
+      ]
+    },
+    "PyMuPDF": {
+      "version": "1.23.8",
+      "dependencies": [
+        "pillow"
+      ]
+    },
+    "pdfplumber": {
+      "version": "0.10.3",
+      "dependencies": [
+        "pdfminer.six",
+        "pillow",
+        "pypdfium2"
+      ]
+    },
+    "pillow": {
+      "version": "10.2.0",
+      "dependencies": []
+    },
+    "python-dateutil": {
+      "version": "2.8.2",
+      "dependencies": [
+        "six"
+      ]
+    },
+    "pandas": {
+      "version": "2.2.1",
+      "dependencies": [
+        "numpy",
+        "python-dateutil",
+        "pytz",
+        "tzdata"
+      ]
+    },
+    "python-dotenv": {
+      "version": "1.0.1",
+      "dependencies": []
+    },
+    "pdf2image": {
+      "version": "1.17.0",
+      "dependencies": [
+        "pillow"
+      ],
+      "optional": true
+    },
+    "pytesseract": {
+      "version": "0.3.10",
+      "dependencies": [
+        "packaging",
+        "pillow"
+      ],
+      "optional": true
+    }
+  }
+} 
